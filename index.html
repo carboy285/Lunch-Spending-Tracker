@@ -6,6 +6,8 @@
   <title>Lunch Tracker</title>
   <meta name="description" content="Track what you spend on school breakfast and lunch, set a budget, and see your history.">
   <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'self'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Ctext x='16' y='23' font-size='20' font-weight='700' text-anchor='middle' fill='white' font-family='sans-serif'%3E$%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -19,7 +21,7 @@
         <button class="icon-btn" data-action="prev-day" aria-label="Previous day">&lsaquo;</button>
         <label class="date-field">
           <span class="sr">Date</span>
-          <input type="date" id="dateInput">
+          <input type="date" id="dateInput" min="2000-01-01" max="2100-12-31">
         </label>
         <button class="icon-btn" data-action="next-day" aria-label="Next day">&rsaquo;</button>
         <button class="btn ghost small" data-action="today" id="todayBtn">Today</button>

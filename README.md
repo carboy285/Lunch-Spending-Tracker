@@ -16,6 +16,13 @@ Pick items from the menu, add them to your day, set a budget, and look back at y
 - **Nutrition:** calories on every card; fat, sodium, sugar, protein and more under *Nutrition*.
 - Works on phones, light and dark mode. Data is saved in the browser (`localStorage`) on that device only.
 
+## Privacy and security
+
+- No accounts, no network requests, no third-party scripts or fonts. Nothing leaves the browser.
+- A strict Content-Security-Policy (set in `index.html`) allows only this site's own scripts and styles.
+- Everything read back from saved data is validated, so a corrupted or edited save can't break the totals or inject markup.
+- Saved data lives in the browser's `localStorage`, so on a shared computer anyone using the same browser profile can see it.
+
 ## Publishing with GitHub Pages
 
 Settings → Pages → *Build and deployment* → **Deploy from a branch** → `main` / `(root)`.

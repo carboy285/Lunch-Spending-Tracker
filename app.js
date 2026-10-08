@@ -37,21 +37,51 @@
     if (k === addDays(t, 1)) return 'Tomorrow';
     return fmtDate(k);
   };
+  const MAX_QTY = 99;
+  const MAX_BUDGET_CENTS = 100000; // $1,000
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
   const inCents = v => {
     const n = parseFloat(v);
-    return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null;
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.round(n * 100), MAX_BUDGET_CENTS) : null;
   };
 
   // ---------- state ----------
   const blank = () => ({ entries: [], budget: { daily: null, weekly: null } });
   let memoryOnly = null;
+  // Saved data is untrusted (it can be edited in dev tools or corrupted), so rebuild every field.
+  const text = (v, max) => String(v ?? '').slice(0, max);
+  function cleanEntry(e) {
+    if (!e || typeof e !== 'object') return null;
+    const qty = Math.floor(Number(e.qty));
+    const cents = e.cents == null ? null : Number(e.cents);
+    const cal = e.cal == null ? null : Number(e.cal);
+    if (typeof e.date !== 'string' || !DATE_RE.test(e.date) || Number.isNaN(parseKey(e.date).getTime())) return null;
+    if (!MEALS.includes(e.meal) || !(qty >= 1)) return null;
+    if (cents !== null && !(Number.isInteger(cents) && cents >= 0 && cents <= 100000)) return null;
+    const itemId = text(e.itemId, 120);
+    return {
+      key: `${e.date}|${e.meal}|${itemId}`, date: e.date, meal: e.meal, itemId,
+      name: text(e.name, 120), serving: text(e.serving, 60), cents,
+      cal: cal !== null && Number.isFinite(cal) && cal >= 0 && cal <= 100000 ? cal : null,
+      qty: Math.min(qty, MAX_QTY),
+    };
+  }
+  function cleanState(s) {
+    const merged = new Map();
+    for (const raw of Array.isArray(s && s.entries) ? s.entries : []) {
+      const e = cleanEntry(raw);
+      if (!e) continue;
+      const dup = merged.get(e.key);
+      if (dup) dup.qty = Math.min(MAX_QTY, dup.qty + e.qty); else merged.set(e.key, e);
+    }
+    const goal = v => (Number.isInteger(v) && v > 0 && v <= MAX_BUDGET_CENTS ? v : null);
+    const b = (s && s.budget) || {};
+    return { entries: [...merged.values()], budget: { daily: goal(b.daily), weekly: goal(b.weekly) } };
+  }
   function load() {
     try {
       const raw = localStorage.getItem(STORE_KEY);
-      if (raw) {
-        const s = JSON.parse(raw);
-        return { entries: Array.isArray(s.entries) ? s.entries : [], budget: { daily: null, weekly: null, ...(s.budget || {}) } };
-      }
+      if (raw) return cleanState(JSON.parse(raw));
     } catch (e) { /* storage unavailable or corrupt: start fresh */ }
     return memoryOnly || blank();
   }
@@ -148,7 +178,7 @@
     const t = totals(entries);
     let body;
     if (!entries.length) {
-      body = `<p class="empty">${compact ? 'Add items from the menu.' : 'Nothing logged for this day yet.'}</p>${compact ? '' : '<div class="actions" style="justify-content:center"><button class="btn primary" data-tab-go="menu">Browse the menu</button></div>'}`;
+      body = `<p class="empty">${compact ? 'Add items from the menu.' : 'Nothing logged for this day yet.'}</p>${compact ? '' : '<div class="actions center"><button class="btn primary" data-tab-go="menu">Browse the menu</button></div>'}`;
     } else {
       body = MEALS.map(m => {
         const rows = entries.filter(e => e.meal === m);
@@ -159,7 +189,7 @@
             <div class="row-price ${e.cents == null ? 'na' : ''}">${e.cents == null ? 'N/A' : money(e.cents * e.qty)}</div>
             <div class="row-ctrl">
               <button class="step" data-action="qty" data-key="${esc(e.key)}" data-d="-1" aria-label="One less ${esc(e.name)}">&minus;</button>
-              <span class="qty" aria-label="Quantity">${e.qty}</span>
+              <span class="qty">${e.qty}</span>
               <button class="step" data-action="qty" data-key="${esc(e.key)}" data-d="1" aria-label="One more ${esc(e.name)}">+</button>
               <button class="link-btn" data-action="remove" data-key="${esc(e.key)}" aria-label="Remove ${esc(e.name)}">Remove</button>
             </div>
@@ -170,7 +200,7 @@
           <div class="meta"><span>${t.items} item${t.items === 1 ? '' : 's'}</span><span>${t.cal} cal</span></div>
         </div>
         ${t.na ? `<p class="note"><b>${t.na} item${t.na === 1 ? ' has' : 's have'} no price (N/A)</b> and ${t.na === 1 ? "isn't" : "aren't"} counted in your total.</p>` : ''}
-        <div class="actions" style="margin-top:12px"><button class="btn danger small" data-action="clear-day">Clear this day</button></div>`;
+        <div class="actions top-gap"><button class="btn danger small" data-action="clear-day">Clear this day</button></div>`;
     }
     el.innerHTML = `<div class="card-box tray"><h2 class="h2"><span>${esc(dayName(ui.date))}</span><span class="meta">${esc(fmtDate(ui.date, { month: 'short', day: 'numeric', year: 'numeric' }))}</span></h2>${body}</div>`;
   }
@@ -190,7 +220,7 @@
         <div class="stat-label">${label}</div>
         <div class="stat-value">${left >= 0 ? money(left) : money(-left)}</div>
         <div class="stat-sub">${left >= 0 ? 'left' : 'over'} of ${money(goal)}${sub ? ' &middot; ' + sub : ''}</div>
-        <div class="meter" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>
+        <div class="meter" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span data-pct="${pct}"></span></div>
       </div>`;
     };
     const noGoal = label => `<div class="stat"><div class="stat-label">${label}</div><div class="stat-value">&mdash;</div><div class="stat-sub">No goal yet. <a href="#" data-tab-go="goals">Set a budget</a></div></div>`;
@@ -225,7 +255,7 @@
       const x = L + i * slot + (slot - bw) / 2, h = (spend[i] / top) * ih;
       const cls = ['bar-rect', d === todayKey() ? 'today' : '', daily && spend[i] > daily ? 'over' : ''].join(' ');
       svg += `<g><title>${esc(fmtDate(d))}: ${money(spend[i])}</title>`;
-      if (spend[i] > 0) svg += `<rect class="${cls}" x="${x}" y="${y(spend[i])}" width="${bw}" height="${h}" rx="3"/><text class="val" x="${x + bw / 2}" y="${y(spend[i]) - 4}" text-anchor="middle" style="font-size:9.5px">${money(spend[i]).replace('.00', '')}</text>`;
+      if (spend[i] > 0) svg += `<rect class="${cls}" x="${x}" y="${y(spend[i])}" width="${bw}" height="${h}" rx="3"/><text class="val" x="${x + bw / 2}" y="${y(spend[i]) - 4}" text-anchor="middle">${money(spend[i]).replace('.00', '')}</text>`;
       svg += `<text x="${x + bw / 2}" y="${H - 22}" text-anchor="middle">${fmtDate(d, { weekday: 'narrow' })}</text><text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle">${parseKey(d).getDate()}</text></g>`;
     });
     if (daily) svg += `<line class="goal" x1="${L}" x2="${W - R}" y1="${y(daily)}" y2="${y(daily)}"/><text class="goal-label" x="${L + 4}" y="${y(daily) - 5}">Goal ${money(daily)}</text>`;
@@ -246,13 +276,13 @@
         <div class="mini"><b>${money(avg)}</b><span>Average per day with spending</span></div>
         <div class="mini"><b>${allNa}</b><span>Logged items with no price (N/A)</span></div>
       </div>
-      <div class="card-box"><h2 class="h2" style="margin-bottom:8px">Last 14 days</h2>${svg}</div>
+      <div class="card-box"><h2 class="h2 mb">Last 14 days</h2>${svg}</div>
       <h2 class="h2">Daily log</h2>
       ${logged.length ? logged.map(d => {
         const t = dayTotals(d), es = entriesOn(d);
         return `<details class="day"><summary><span>${esc(fmtDate(d, { weekday: 'long', month: 'short', day: 'numeric' }))}${t.na ? ` <span class="meta">&middot; ${t.na} N/A</span>` : ''}</span><span>${money(t.cents)}</span></summary>
           <ul>${es.map(e => `<li><span>${e.qty > 1 ? e.qty + '&times; ' : ''}${esc(e.name)} <span class="meta">(${esc(MEAL_LABEL[e.meal])})</span></span>${e.cents == null ? '<span class="na">N/A</span>' : `<span>${money(e.cents * e.qty)}</span>`}</li>`).join('')}</ul>
-          <div class="actions" style="padding:0 14px 12px"><button class="btn small" data-action="goto-date" data-date="${d}">Open this day</button></div></details>`;
+          <div class="actions day-actions"><button class="btn small" data-action="goto-date" data-date="${esc(d)}">Open this day</button></div></details>`;
       }).join('') : '<p class="empty card-box">Nothing logged yet. Add something from the menu and it will show up here.</p>'}`;
   }
 
@@ -262,7 +292,7 @@
     $('#panel-goals').innerHTML = `
       <div class="card-box">
         <h2 class="h2">Budget goals</h2>
-        <p class="hint" style="margin:4px 0 14px">Set how much you want to spend. The summary at the top turns yellow when you reach 80% and red when you go over. Leave a box empty for no limit.</p>
+        <p class="hint gap-b">Set how much you want to spend. The summary at the top turns yellow when you reach 80% and red when you go over. Leave a box empty for no limit.</p>
         <form class="form" id="goalForm">
           <div class="field"><label for="dailyGoal">Daily limit</label>
             <div class="money"><span aria-hidden="true">$</span><input id="dailyGoal" name="daily" type="number" inputmode="decimal" min="0" step="0.25" placeholder="e.g. 5.00" value="${daily ? (daily / 100).toFixed(2) : ''}"></div></div>
@@ -273,13 +303,23 @@
       </div>
       <div class="card-box">
         <h2 class="h2">Your data</h2>
-        <p class="hint" style="margin:4px 0 12px">Everything is stored in this browser only. Clearing it can't be undone.</p>
+        <p class="hint gap-b">Everything is stored in this browser only. Clearing it can't be undone.</p>
         <button class="btn danger" data-action="clear-all">Delete all logged days</button>
       </div>`;
   }
 
+  // Re-rendering replaces the buttons, so put keyboard focus back on the equivalent one.
+  function keepFocus(fn) {
+    const el = document.activeElement;
+    const sel = el && el.dataset && el.dataset.action
+      ? ['action', 'id', 'key', 'd', 'meal', 'group', 'value', 'date'].filter(k => el.dataset[k] != null).map(k => `[data-${k}="${CSS.escape(el.dataset[k])}"]`).join('')
+      : null;
+    fn();
+    if (sel) { const next = $(sel); if (next) next.focus({ preventScroll: true }); }
+  }
+
   // ---------- main render ----------
-  function render() {
+  function renderNow() {
     $('#dateInput').value = ui.date;
     $('#todayBtn').hidden = ui.date === todayKey();
     renderSummary();
@@ -297,7 +337,10 @@
     if (ui.tab === 'today') renderTray($('#panel-today'), false);
     if (ui.tab === 'history') renderHistory();
     if (ui.tab === 'goals') renderGoals();
+    $$('[data-pct]').forEach(el => { el.style.width = el.dataset.pct + '%'; });
   }
+
+  const render = () => keepFocus(renderNow);
 
   // ---------- actions ----------
   let toastTimer;
@@ -309,6 +352,7 @@
   function addEntry(entry) {
     const key = `${ui.date}|${entry.meal}|${entry.itemId}`;
     const existing = state.entries.find(e => e.key === key);
+    if (existing && existing.qty >= MAX_QTY) return toast(`You can log up to ${MAX_QTY} of the same item`);
     if (existing) existing.qty += 1;
     else state.entries.push({ key, date: ui.date, qty: 1, ...entry });
     save(); render();
@@ -317,7 +361,7 @@
   function addItem(id) {
     const i = BY_ID.get(id); if (!i) return;
     const f = ui.filters.meal;
-    const meal = f !== 'all' && i.meals.includes(f) ? f : (i.meals.includes('lunch') ? 'lunch' : i.meals[0]);
+    const meal = f !== 'all' && i.meals.includes(f) ? f : (i.meals.includes('lunch') ? 'lunch' : (i.meals[0] || 'lunch'));
     addEntry({ meal, itemId: i.id, name: i.name, serving: i.servingLabel, cents: i.cents, cal: i.nutrition.calories ?? null });
   }
   function addCombo(meal) {
@@ -325,7 +369,7 @@
     addEntry({ meal, itemId: 'combo-' + meal, name: c.name, serving: 'Full meal', cents: c.priceCents, cal: null });
   }
   function setTab(tab) { ui.tab = tab; render(); window.scrollTo({ top: 0 }); }
-  function setDate(k) { if (/^\d{4}-\d{2}-\d{2}$/.test(k)) { ui.date = k; render(); } }
+  function setDate(k) { if (DATE_RE.test(k) && !Number.isNaN(parseKey(k).getTime())) ui.date = k; render(); }
 
   document.addEventListener('click', ev => {
     const tabBtn = ev.target.closest('[data-tab]');
@@ -342,10 +386,10 @@
       case 'goto-date': ui.tab = 'today'; return setDate(d.date);
       case 'add': return addItem(d.id);
       case 'combo': return addCombo(d.meal);
-      case 'filter': ui.filters[d.group] = d.value; return renderItemList();
+      case 'filter': ui.filters[d.group] = d.value; return keepFocus(renderItemList);
       case 'qty': {
         const e = state.entries.find(x => x.key === d.key); if (!e) return;
-        e.qty += Number(d.d);
+        e.qty = Math.min(MAX_QTY, e.qty + Number(d.d));
         if (e.qty < 1) state.entries = state.entries.filter(x => x !== e);
         save(); return render();
       }
@@ -370,6 +414,29 @@
     const f = new FormData(ev.target);
     state.budget = { daily: inCents(f.get('daily')), weekly: inCents(f.get('weekly')) };
     save(); render(); toast('Budget saved');
+  });
+
+  // Another tab changed the saved log: pick it up instead of overwriting it on the next save.
+  window.addEventListener('storage', ev => {
+    if (ev.key === STORE_KEY || ev.key === null) { state = load(); render(); }
+  });
+  // If the page stays open past midnight, "today" should move on.
+  let lastToday = todayKey();
+  function rollDay() {
+    const t = todayKey();
+    if (t === lastToday) return;
+    if (ui.date === lastToday) ui.date = t;
+    lastToday = t; render();
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) rollDay(); });
+  window.addEventListener('focus', rollDay);
+
+  $('.tabs').addEventListener('keydown', ev => {
+    const keys = { ArrowRight: 1, ArrowLeft: -1, Home: 'first', End: 'last' };
+    if (!(ev.key in keys)) return;
+    const tabs = $$('.tab'), cur = tabs.findIndex(t => t.dataset.tab === ui.tab);
+    const i = keys[ev.key] === 'first' ? 0 : keys[ev.key] === 'last' ? tabs.length - 1 : (cur + keys[ev.key] + tabs.length) % tabs.length;
+    ev.preventDefault(); setTab(tabs[i].dataset.tab); tabs[i].focus();
   });
 
   buildMenuShell();
