@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lunch Tracker</title>
+  <meta name="description" content="Track what you spend on school breakfast and lunch, set a budget, and see your history.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Ctext x='16' y='23' font-size='20' font-weight='700' text-anchor='middle' fill='white' font-family='sans-serif'%3E$%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="top">
+    <div class="wrap top-row">
+      <h1 class="brand"><span class="brand-mark" aria-hidden="true">$</span> Lunch Tracker</h1>
+      <div class="date-nav" role="group" aria-label="Choose day">
+        <button class="icon-btn" data-action="prev-day" aria-label="Previous day">&lsaquo;</button>
+        <label class="date-field">
+          <span class="sr">Date</span>
+          <input type="date" id="dateInput">
+        </label>
+        <button class="icon-btn" data-action="next-day" aria-label="Next day">&rsaquo;</button>
+        <button class="btn ghost small" data-action="today" id="todayBtn">Today</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    <section class="summary" id="summary" aria-label="Summary for the selected day"></section>
+
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" class="tab" id="tab-menu" data-tab="menu" aria-controls="panel-menu">Menu</button>
+      <button role="tab" class="tab" id="tab-today" data-tab="today" aria-controls="panel-today">My day <span class="count" id="trayCount" hidden></span></button>
+      <button role="tab" class="tab" id="tab-history" data-tab="history" aria-controls="panel-history">History</button>
+      <button role="tab" class="tab" id="tab-goals" data-tab="goals" aria-controls="panel-goals">Budget</button>
+    </nav>
+
+    <div class="layout">
+      <section class="panel" id="panel-menu" role="tabpanel" aria-labelledby="tab-menu"></section>
+      <section class="panel" id="panel-today" role="tabpanel" aria-labelledby="tab-today"></section>
+      <section class="panel" id="panel-history" role="tabpanel" aria-labelledby="tab-history"></section>
+      <section class="panel" id="panel-goals" role="tabpanel" aria-labelledby="tab-goals"></section>
+      <aside class="side" id="side" aria-label="Today's tray"></aside>
+    </div>
+  </main>
+
+  <div class="bar" id="mobileBar" hidden>
+    <div><span class="bar-label">Spent</span> <strong id="barTotal">$0.00</strong></div>
+    <button class="btn primary small" data-tab-go="today">View my day</button>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <footer class="wrap foot">
+    <p>Prices come from the school menu sheet. <strong>N/A</strong> means no price was listed, so the item isn't added to your total. Prices marked <em>est.</em> are estimates. Your log is saved on this device only.</p>
+  </footer>
+
+  <script src="menu-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
